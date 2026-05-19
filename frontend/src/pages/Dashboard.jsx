@@ -33,6 +33,7 @@ import { getChild } from "../api/child";
 import { getActiveAlerts } from "../api/alerts";
 import { getDailySummary } from "../api/summary";
 import LoadingSkeleton from "../components/LoadingSkeleton";
+import MilestoneTracker from "../components/MilestoneTracker";
 
 const weeklyData = [
   { day: "Mon", sleep: 8.5, feedings: 5, diapers: 4 },
@@ -449,6 +450,13 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
+
+          {/* Milestone Tracker */}
+          <MilestoneTracker
+            dateOfBirth={child?.date_of_birth}
+            childName={child?.name}
+          />
+
         </div>
       </main>
     </div>
