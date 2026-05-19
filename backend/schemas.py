@@ -65,11 +65,34 @@ class DailySummaryResponse(BaseModel):
     total_diapers: int
     total_feedings: int
     total_crying_mins: int
+    last_sleep_time: Optional[datetime] = None
+    last_temperature_time: Optional[datetime] = None
+    last_diaper_time: Optional[datetime] = None
+    last_feeding_time: Optional[datetime] = None
     text: str = ""
 
     class Config:
         from_attributes = True
 
+
+    class Config:
+        from_attributes = True
+
+class WeeklyDataPoint(BaseModel):
+    day: str
+    sleep: float
+    feedings: int
+    diapers: int
+
+class MonthlyDataPoint(BaseModel):
+    week: str
+    sleep: float
+    feedings: int
+    diapers: int
+
+class ChartsResponse(BaseModel):
+    weekly: list[WeeklyDataPoint]
+    monthly: list[MonthlyDataPoint]
 
 # ─── Activity schemas (new) ───────────────────────────────────
 

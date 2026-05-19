@@ -176,22 +176,42 @@ DELIMITER ;
 -- Daily summary view: aggregates all categories for a child for any given day
 CREATE VIEW daily_summary AS
 SELECT
-    c.id                                          AS child_id,
-    c.name                                        AS child_name,
-    DATE(sl.start_time)                           AS log_date,
-    ROUND(SUM(TIMESTAMPDIFF(MINUTE, sl.start_time, sl.end_time)) / 60, 1)
-                                                  AS total_sleep_hours,
-    ROUND(AVG(tl.value), 1)                       AS avg_temperature,
-    SUM(dl.count)                                 AS total_diapers,
-    SUM(fl.count)                                 AS total_feedings,
-    SUM(cl.duration_mins)                         AS total_crying_mins
+    c.id AS child_id,
+    c.name AS child_name,
+    dates.log_date,
+    COALESCE(sl.total_sleep_hours, 0) AS total_sleep_hours,
+    COALESCE(tl.avg_temperature, 0) AS avg_temperature,
+    COALESCE(dl.total_diapers, 0) AS total_diapers,
+    COALESCE(fl.total_feedings, 0) AS total_feedings,
+    COALESCE(cl.total_crying_mins, 0) AS total_crying_mins
 FROM child c
-LEFT JOIN sleep_logs       sl ON sl.child_id = c.id
-LEFT JOIN temperature_logs tl ON tl.child_id = c.id AND DATE(tl.logged_at)  = DATE(sl.start_time)
-LEFT JOIN diaper_logs      dl ON dl.child_id = c.id AND DATE(dl.logged_at)  = DATE(sl.start_time)
-LEFT JOIN feeding_logs     fl ON fl.child_id = c.id AND DATE(fl.logged_at)  = DATE(sl.start_time)
-LEFT JOIN crying_logs      cl ON cl.child_id = c.id AND DATE(cl.logged_at)  = DATE(sl.start_time)
-GROUP BY c.id, c.name, DATE(sl.start_time);
+JOIN (
+    SELECT child_id, DATE(start_time) AS log_date FROM sleep_logs
+    UNION SELECT child_id, DATE(logged_at) AS log_date FROM temperature_logs
+    UNION SELECT child_id, DATE(logged_at) AS log_date FROM diaper_logs
+    UNION SELECT child_id, DATE(logged_at) AS log_date FROM feeding_logs
+    UNION SELECT child_id, DATE(logged_at) AS log_date FROM crying_logs
+) dates ON dates.child_id = c.id
+LEFT JOIN (
+    SELECT child_id, DATE(start_time) AS log_date, ROUND(SUM(TIMESTAMPDIFF(MINUTE, start_time, end_time)) / 60, 1) AS total_sleep_hours
+    FROM sleep_logs GROUP BY child_id, DATE(start_time)
+) sl ON sl.child_id = c.id AND sl.log_date = dates.log_date
+LEFT JOIN (
+    SELECT child_id, DATE(logged_at) AS log_date, ROUND(AVG(value), 1) AS avg_temperature
+    FROM temperature_logs GROUP BY child_id, DATE(logged_at)
+) tl ON tl.child_id = c.id AND tl.log_date = dates.log_date
+LEFT JOIN (
+    SELECT child_id, DATE(logged_at) AS log_date, SUM(count) AS total_diapers
+    FROM diaper_logs GROUP BY child_id, DATE(logged_at)
+) dl ON dl.child_id = c.id AND dl.log_date = dates.log_date
+LEFT JOIN (
+    SELECT child_id, DATE(logged_at) AS log_date, SUM(count) AS total_feedings
+    FROM feeding_logs GROUP BY child_id, DATE(logged_at)
+) fl ON fl.child_id = c.id AND fl.log_date = dates.log_date
+LEFT JOIN (
+    SELECT child_id, DATE(logged_at) AS log_date, SUM(duration_mins) AS total_crying_mins
+    FROM crying_logs GROUP BY child_id, DATE(logged_at)
+) cl ON cl.child_id = c.id AND cl.log_date = dates.log_date;
 
 -- Weekly overview view: used for dashboard graphs
 CREATE VIEW weekly_summary AS

@@ -31,26 +31,9 @@ import {
 import { getMe } from "../api/auth";
 import { getChild } from "../api/child";
 import { getActiveAlerts } from "../api/alerts";
-import { getDailySummary } from "../api/summary";
+import { getDailySummary, getChartsData } from "../api/summary";
 import LoadingSkeleton from "../components/LoadingSkeleton";
 import MilestoneTracker from "../components/MilestoneTracker";
-
-const weeklyData = [
-  { day: "Mon", sleep: 8.5, feedings: 5, diapers: 4 },
-  { day: "Tue", sleep: 7.2, feedings: 4, diapers: 5 },
-  { day: "Wed", sleep: 9.0, feedings: 6, diapers: 3 },
-  { day: "Thu", sleep: 6.8, feedings: 4, diapers: 4 },
-  { day: "Fri", sleep: 8.0, feedings: 5, diapers: 5 },
-  { day: "Sat", sleep: 7.5, feedings: 4, diapers: 3 },
-  { day: "Sun", sleep: 8.5, feedings: 4, diapers: 3 },
-];
-
-const monthlyData = [
-  { week: "Week 1", sleep: 56, feedings: 32, diapers: 28 },
-  { week: "Week 2", sleep: 52, feedings: 30, diapers: 25 },
-  { week: "Week 3", sleep: 58, feedings: 35, diapers: 30 },
-  { week: "Week 4", sleep: 54, feedings: 28, diapers: 26 },
-];
 
 
 
@@ -71,6 +54,7 @@ export default function DashboardPage() {
   const [alerts, setAlerts] = useState([]);
   const [currentAlertIndex, setCurrentAlertIndex] = useState(0);
   const [summary, setSummary] = useState(null);
+  const [chartsData, setChartsData] = useState({ weekly: [], monthly: [] });
   const [isSummaryLoading, setIsSummaryLoading] = useState(true);
 
   useEffect(() => {
@@ -87,10 +71,11 @@ export default function DashboardPage() {
         if (currentChild && currentChild.id) {
           const today = new Date().toISOString().split('T')[0];
           
-          // Fetch alerts and summary in parallel
-          const [alertsRes, summaryRes] = await Promise.allSettled([
+          // Fetch alerts, summary and charts data in parallel
+          const [alertsRes, summaryRes, chartsRes] = await Promise.allSettled([
             getActiveAlerts(currentChild.id),
-            getDailySummary(currentChild.id, today)
+            getDailySummary(currentChild.id, today),
+            getChartsData(currentChild.id)
           ]);
           
           if (alertsRes.status === 'fulfilled' && alertsRes.value) {
@@ -99,6 +84,10 @@ export default function DashboardPage() {
           
           if (summaryRes.status === 'fulfilled' && summaryRes.value) {
             setSummary(summaryRes.value);
+          }
+          
+          if (chartsRes.status === 'fulfilled' && chartsRes.value) {
+            setChartsData(chartsRes.value);
           }
         }
       } catch (error) {
@@ -110,6 +99,14 @@ export default function DashboardPage() {
     
     loadDashboardData();
   }, []);
+
+  const isBirthday = () => {
+    if (!child) return false
+    const today = new Date()
+    const dob = new Date(child.date_of_birth)
+    return today.getDate() === dob.getDate() && 
+           today.getMonth() === dob.getMonth()
+  }
 
   const handleLogout = () => {
     localStorage.clear();
@@ -129,19 +126,28 @@ export default function DashboardPage() {
     setCurrentAlertIndex((prev) => (prev + 1) % alerts.length);
   };
 
-  const chartData = activeTab === "weekly" ? weeklyData : monthlyData;
+  const chartData = activeTab === "weekly" ? chartsData.weekly : chartsData.monthly;
   const chartKey = activeTab === "weekly" ? "day" : "week";
 
+  const timeAgo = (dateStr) => {
+    if (!dateStr) return "--";
+    // Ensure we parse UTC explicitly by appending 'Z' if needed, assuming backend sends UTC without Z
+    const normalizedStr = dateStr.endsWith('Z') ? dateStr : `${dateStr}Z`;
+    const diff = (new Date() - new Date(normalizedStr)) / 1000 / 60; // in minutes
+    if (diff < 60) return `${Math.floor(Math.max(0, diff))}m ago`;
+    return `${Math.floor(Math.max(0, diff / 60))}h ago`;
+  };
+
   const computedStats = summary ? {
-    naps: { total: 0, hours: `${summary.total_sleep_hours}h`, last: "--" },
-    food: { times: summary.total_feedings, last: "--" },
-    diapers: { wet: summary.total_diapers, dirty: 0, last: "--" },
-    temperature: { value: summary.avg_temperature, last: "--" },
+    naps: { total: 0, hours: `${summary.total_sleep_hours}h` },
+    food: { times: summary.total_feedings },
+    diapers: { wet: summary.total_diapers, dirty: 0 },
+    temperature: { value: summary.avg_temperature },
   } : {
-    naps: { total: 0, hours: "0h", last: "--" },
-    food: { times: 0, last: "--" },
-    diapers: { wet: 0, dirty: 0, last: "--" },
-    temperature: { value: "0", last: "--" },
+    naps: { total: 0, hours: "0h" },
+    food: { times: 0 },
+    diapers: { wet: 0, dirty: 0 },
+    temperature: { value: "0" },
   };
 
   return (
@@ -274,6 +280,17 @@ export default function DashboardPage() {
             </div>
           )}
 
+          {/* Birthday Banner */}
+          {isBirthday() && (
+            <div className="w-full bg-gradient-to-r from-pink-200 to-blue-200 rounded-xl p-4 mb-4 flex items-center gap-3">
+              <span className="text-2xl">🎂</span>
+              <p className="text-pink-700 font-medium">
+                Happy Birthday {child.name}! 🎉 
+                Wishing your little one a wonderful day!
+              </p>
+            </div>
+          )}
+
           {/* Summary Tabs */}
           <div className="bg-white rounded-2xl shadow-sm border border-[oklch(0.94_0.02_340)] overflow-hidden">
             {/* Tab Switcher */}
@@ -306,7 +323,7 @@ export default function DashboardPage() {
                         <Moon className="w-5 h-5 text-[oklch(0.65_0.1_230)]" />
                         <span className="font-semibold text-[oklch(0.4_0.05_230)]">Naps</span>
                       </div>
-                      <div className="grid grid-cols-3 gap-2 text-sm">
+                      <div className="grid grid-cols-2 gap-2 text-sm">
                         <div>
                           <p className="text-muted-foreground">Times</p>
                           <p className="font-bold text-[oklch(0.35_0.05_230)] text-lg">{computedStats.naps.total}</p>
@@ -314,10 +331,6 @@ export default function DashboardPage() {
                         <div>
                           <p className="text-muted-foreground">Hours</p>
                           <p className="font-bold text-[oklch(0.35_0.05_230)] text-lg">{computedStats.naps.hours}</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Last</p>
-                          <p className="font-bold text-[oklch(0.35_0.05_230)] text-lg">{computedStats.naps.last}</p>
                         </div>
                       </div>
                     </div>
@@ -328,14 +341,10 @@ export default function DashboardPage() {
                         <Baby className="w-5 h-5 text-[oklch(0.65_0.1_340)]" />
                         <span className="font-semibold text-[oklch(0.4_0.05_340)]">Feeding</span>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="grid grid-cols-1 gap-2 text-sm">
                         <div>
                           <p className="text-muted-foreground">Times</p>
                           <p className="font-bold text-[oklch(0.35_0.05_340)] text-lg">{computedStats.food.times}</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Last</p>
-                          <p className="font-bold text-[oklch(0.35_0.05_340)] text-lg">{computedStats.food.last}</p>
                         </div>
                       </div>
                     </div>
@@ -346,7 +355,7 @@ export default function DashboardPage() {
                         <Droplets className="w-5 h-5 text-[oklch(0.65_0.1_80)]" />
                         <span className="font-semibold text-[oklch(0.4_0.05_80)]">Diapers</span>
                       </div>
-                      <div className="grid grid-cols-3 gap-2 text-sm">
+                      <div className="grid grid-cols-2 gap-2 text-sm">
                         <div>
                           <p className="text-muted-foreground">Wet</p>
                           <p className="font-bold text-[oklch(0.35_0.05_80)] text-lg">{computedStats.diapers.wet}</p>
@@ -354,10 +363,6 @@ export default function DashboardPage() {
                         <div>
                           <p className="text-muted-foreground">Dirty</p>
                           <p className="font-bold text-[oklch(0.35_0.05_80)] text-lg">{computedStats.diapers.dirty}</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Last</p>
-                          <p className="font-bold text-[oklch(0.35_0.05_80)] text-lg">{computedStats.diapers.last}</p>
                         </div>
                       </div>
                     </div>
@@ -368,14 +373,10 @@ export default function DashboardPage() {
                         <Thermometer className="w-5 h-5 text-[oklch(0.55_0.12_150)]" />
                         <span className="font-semibold text-[oklch(0.4_0.05_150)]">Temperature</span>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="grid grid-cols-1 gap-2 text-sm">
                         <div>
                           <p className="text-muted-foreground">Temp</p>
                           <p className="font-bold text-[oklch(0.35_0.05_150)] text-lg">{computedStats.temperature.value}°C</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Last</p>
-                          <p className="font-bold text-[oklch(0.35_0.05_150)] text-lg">{computedStats.temperature.last}</p>
                         </div>
                       </div>
                     </div>

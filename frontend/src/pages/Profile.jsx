@@ -231,14 +231,6 @@ export default function ProfilePage() {
                 <p className="text-muted-foreground text-sm">{parentInfo?.email}</p>
               </div>
 
-              <button
-                type="button"
-                onClick={() => alert("Coming soon!")}
-                className="w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-gradient-to-r from-[oklch(0.8_0.1_340)] via-[oklch(0.78_0.09_300)] to-[oklch(0.78_0.1_230)] text-white font-medium shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all"
-              >
-                <Pencil className="w-5 h-5" />
-                Edit Profile
-              </button>
             </div>
           ) : (
             /* State 2: No Profile Yet */

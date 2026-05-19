@@ -89,15 +89,7 @@ export default function LoginPage() {
             />
           </div>
 
-          {/* Forgot Password Link */}
-          <div className="text-right">
-            <button
-              type="button"
-              className="text-sm text-[oklch(0.65_0.1_340)] hover:text-[oklch(0.55_0.12_340)] transition-colors"
-            >
-              Forgot password?
-            </button>
-          </div>
+
 
           {/* Login Button */}
           <button
