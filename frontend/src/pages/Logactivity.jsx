@@ -24,7 +24,7 @@ const TABS = [
     key:         "sleep",
     label:       "Sleep",
     Icon:        Moon,
-    accent:      "230",   // oklch hue
+    accent:      "230",
     description: "Log a sleep session with start and end time",
   },
   {
@@ -75,15 +75,15 @@ export default function LogActivityPage() {
   const [date,       setDate]       = useState(todayStr());
   const [todayLogs,  setTodayLogs]  = useState(null);
   const [loading,    setLoading]    = useState(false);
-  const [toast,      setToast]      = useState(null); // { msg, ok }
+  const [toast,      setToast]      = useState(null);
 
   // form values
   const [sleepStart, setSleepStart]  = useState("");
   const [sleepEnd,   setSleepEnd]    = useState("");
   const [tempVal,    setTempVal]     = useState("");
-  const [diaperCnt,  setDiaperCnt]  = useState("");
-  const [feedingCnt, setFeedingCnt] = useState("");
-  const [cryingMins, setCryingMins] = useState("");
+  const [diaperCnt,  setDiaperCnt]   = useState("");
+  const [feedingCnt, setFeedingCnt]  = useState("");
+  const [cryingMins, setCryingMins]  = useState("");
 
   // ── load child ─────────────────────────────────────────────
   useEffect(() => {
@@ -114,41 +114,65 @@ export default function LogActivityPage() {
 
   // ── submit handler ────────────────────────────────────────
   async function handleSubmit(e) {
-    e.preventDefault();
-    if (!child?.id) {
-      flash("No child profile found — please create one in Profile first.", false);
-      return;
-    }
-    setLoading(true);
-    try {
-      if (activeTab === "sleep") {
-        if (!sleepStart || !sleepEnd) { flash("Please fill in both times.", false); return; }
-        await logSleep({ child_id: child.id, start_time: sleepStart, end_time: sleepEnd });
-        setSleepStart(""); setSleepEnd("");
-      } else if (activeTab === "temperature") {
-        await logTemperature({ child_id: child.id, value: parseFloat(tempVal) });
-        setTempVal("");
-      } else if (activeTab === "diaper") {
-        await logDiaper({ child_id: child.id, count: parseInt(diaperCnt) });
-        setDiaperCnt("");
-      } else if (activeTab === "feeding") {
-        await logFeeding({ child_id: child.id, count: parseInt(feedingCnt) });
-        setFeedingCnt("");
-      } else if (activeTab === "crying") {
-        await logCrying({ child_id: child.id, duration_mins: parseInt(cryingMins) });
-        setCryingMins("");
-      }
-      flash("Logged successfully!");
-      // refresh today's panel
-      const logs = await getActivities(child.id, date);
-      setTodayLogs(logs);
-    } catch (err) {
-      const detail = err?.response?.data?.detail;
-      flash(typeof detail === "string" ? detail : "Something went wrong.", false);
-    } finally {
-      setLoading(false);
-    }
+  e.preventDefault();
+  if (!child?.id) {
+    flash("No child profile found — please create one in Profile first.", false);
+    return;
   }
+  setLoading(true);
+  try {
+    if (activeTab === "sleep") {
+      if (!sleepStart || !sleepEnd) { 
+        flash("Please fill in both times.", false); 
+        return; 
+      }
+      await logSleep(child.id, { start_time: sleepStart, end_time: sleepEnd });
+      setSleepStart(""); 
+      setSleepEnd("");
+    } else if (activeTab === "temperature") {
+      if (!tempVal) { 
+        flash("Please enter a temperature.", false); 
+        return; 
+      }
+      await logTemperature(child.id, { value: parseFloat(tempVal) });
+      setTempVal("");
+    } else if (activeTab === "diaper") {
+      if (!diaperCnt) { 
+        flash("Please enter the number of diaper changes.", false); 
+        return; 
+      }
+      await logDiaper(child.id, { count: parseInt(diaperCnt) });
+      setDiaperCnt("");
+    } else if (activeTab === "feeding") {
+      if (!feedingCnt) { 
+        flash("Please enter the number of feedings.", false); 
+        return; 
+      }
+      await logFeeding(child.id, { count: parseInt(feedingCnt) });
+      setFeedingCnt("");
+    } else if (activeTab === "crying") {
+      if (!cryingMins) { 
+        flash("Please enter crying duration.", false); 
+        return; 
+      }
+      await logCrying(child.id, { duration_mins: parseInt(cryingMins) });
+      setCryingMins("");
+    }
+    flash("Logged successfully!");
+    
+    // IMPORTANT: Clear todayLogs FIRST, then fetch fresh data
+    setTodayLogs(null);
+    const freshLogs = await getActivities(child.id, date);
+    setTodayLogs(freshLogs);
+    
+  } catch (err) {
+    console.error("Error:", err.response?.data);
+    const detail = err?.response?.data?.detail;
+    flash(typeof detail === "string" ? detail : "Something went wrong.", false);
+  } finally {
+    setLoading(false);
+  }
+}
 
   const handleLogout = () => {
     localStorage.clear();
@@ -164,7 +188,7 @@ export default function LogActivityPage() {
   return (
     <div className="min-h-screen bg-background flex">
 
-      {/* ── Sidebar (identical structure to Dashboard/Profile) ── */}
+      {/* ── Sidebar ── */}
       <aside className="w-64 bg-white border-r border-[oklch(0.94_0.02_340)] fixed left-0 top-0 h-full flex flex-col z-20">
         <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-[oklch(0.85_0.08_340)] to-[oklch(0.82_0.08_230)]" />
         <div className="p-6 pb-4">
@@ -319,7 +343,6 @@ export default function LogActivityPage() {
                     required
                     className={inputCls}
                   />
-                  <p className="text-xs text-muted-foreground mt-1.5">Normal range: 36.0–37.5 °C. Values above 38.5 °C will trigger an alert.</p>
                 </div>
               )}
 
@@ -339,7 +362,6 @@ export default function LogActivityPage() {
                     required
                     className={inputCls}
                   />
-                  <p className="text-xs text-muted-foreground mt-1.5">More than 10 will trigger an alert.</p>
                 </div>
               )}
 
