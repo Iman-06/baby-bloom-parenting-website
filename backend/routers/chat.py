@@ -52,6 +52,32 @@ Keep responses warm, concise, and reassuring. Never diagnose.
 Always end with: "This is general guidance only and not medical advice. When in doubt, consult your pediatrician."
 """
 
+def generate_chat_title(message: str) -> str:
+    """Generate a smart title based on the first message content"""
+    msg = message.lower()
+    
+    # Common topics
+    if any(word in msg for word in ["sleep", "nap", "night", "bedtime", "dream", "rest"]):
+        return "💤 Sleep & Naps"
+    elif any(word in msg for word in ["feed", "eating", "hungry", "milk", "breast", "bottle", "formula"]):
+        return "🍼 Feeding & Nutrition"
+    elif any(word in msg for word in ["cry", "crying", "fussy", "upset", "tantrum"]):
+        return "😢 Crying & Comfort"
+    elif any(word in msg for word in ["temp", "fever", "hot", "temperature", "sick", "cold", "ill"]):
+        return "🤒 Health & Fever"
+    elif any(word in msg for word in ["milestone", "crawl", "walk", "roll", "smile", "laugh", "sit", "stand"]):
+        return "🌟 Developmental Milestones"
+    elif any(word in msg for word in ["diaper", "poop", "pee", "wet", "change"]):
+        return "🧷 Diaper Changes"
+    elif any(word in msg for word in ["vaccine", "shot", "doctor", "pediatrician", "checkup"]):
+        return "🏥 Medical Care"
+    elif any(word in msg for word in ["play", "toy", "game", "activity"]):
+        return "🎮 Play & Activities"
+    elif len(msg) > 40:
+        return msg[:40] + "…"
+    else:
+        return msg.capitalize() if msg else "New Chat"
+
 
 @router.post("/chat", response_model=ChatResponse)
 def send_message(
@@ -69,16 +95,17 @@ def send_message(
         if not session:
             raise HTTPException(status_code=404, detail="Chat session not found")
     else:
-        words = req.message.split()
-        title = " ".join(words[:6]) + ("…" if len(words) > 6 else "")
+        # Create a smart title from the first message
+        title = generate_chat_title(req.message)
         session = ChatSession(user_id=current_user.id, title=title)
         db.add(session)
         db.commit()
         db.refresh(session)
 
+    # Get recent conversation history for context (last 10 messages)
     history = db.query(ChatMessage).filter(
         ChatMessage.session_id == session.id
-    ).order_by(ChatMessage.sent_at).all()
+    ).order_by(ChatMessage.sent_at).limit(10).all()
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     for msg in history:
@@ -96,8 +123,14 @@ def send_message(
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"AI service error: {str(e)}")
 
-    db.add(ChatMessage(session_id=session.id, role="user",      content=req.message))
+    # Save both messages
+    db.add(ChatMessage(session_id=session.id, role="user", content=req.message))
     db.add(ChatMessage(session_id=session.id, role="assistant", content=reply_text))
+    
+    # Update session title if it's still the default and we have more context
+    if session.title == "New Chat" and len(history) > 0:
+        session.title = generate_chat_title(req.message)
+    
     db.commit()
 
     return ChatResponse(
@@ -113,6 +146,9 @@ def get_chat_history(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
     sessions = (
         db.query(ChatSession)
         .filter(ChatSession.user_id == current_user.id)
